@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VOICE_TIMER_STORE_PASSWORD: ${{ secrets.VOICE_TIMER_STORE_PASSWORD }}
-      VOICE_TIMER_KEY_ALIAS: ${{ secrets.VOICE_TIMER_KEY_ALIAS }}
+      VOICE_TIMER_KEY_ALIAS: voice-timer
       VOICE_TIMER_KEY_PASSWORD: ${{ secrets.VOICE_TIMER_STORE_PASSWORD }}
 
     steps:
@@ -24,26 +24,43 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug \
+            -PversionCode=${{ github.run_number }} \
+            -PversionName=0.1.${{ github.run_number }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-timer-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
       - name: Restore signing key
+        if: ${{ env.VOICE_TIMER_STORE_PASSWORD != '' }}
         shell: bash
         run: |
           echo "${{ secrets.VOICE_TIMER_KEYSTORE_B64 }}" | base64 --decode > "$RUNNER_TEMP/voice-timer-release.jks"
           echo "VOICE_TIMER_KEYSTORE=$RUNNER_TEMP/voice-timer-release.jks" >> "$GITHUB_ENV"
 
       - name: Build release APK
+        if: ${{ env.VOICE_TIMER_STORE_PASSWORD != '' }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName=0.1.${{ github.run_number }}
 
       - name: Rename APK
+        if: ${{ env.VOICE_TIMER_STORE_PASSWORD != '' }}
         run: cp app/build/outputs/apk/release/app-release.apk "voice-timer-0.1.${{ github.run_number }}.apk"
 
       - uses: actions/upload-artifact@v4
+        if: ${{ env.VOICE_TIMER_STORE_PASSWORD != '' }}
         with:
           name: voice-timer-apk
           path: voice-timer-*.apk
 
       - name: Publish GitHub Release
+        if: ${{ env.VOICE_TIMER_STORE_PASSWORD != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "v0.1.${{ github.run_number }}" "voice-timer-0.1.${{ github.run_number }}.apk" --title "Voice Timer 0.1.${{ github.run_number }}" --notes "Automated build from commit ${{ github.sha }}"
