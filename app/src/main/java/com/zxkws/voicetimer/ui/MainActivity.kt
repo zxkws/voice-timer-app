@@ -28,7 +28,10 @@ import java.util.concurrent.TimeUnit
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var recognizer: SpeechRecognizer? = null
-    private var lastDuration = 0L
+    private val prefs by lazy { getSharedPreferences("voice_timer", MODE_PRIVATE) }
+    private var lastDuration: Long
+        get() = prefs.getLong("last_duration", 0L)
+        set(value) { prefs.edit().putLong("last_duration", value).apply() }
 
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) listen() else binding.statusText.text = "需要麦克风权限"
@@ -48,7 +51,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        binding.versionText.text = "v${BuildConfig.VERSION_NAME}"
+        binding.versionText.text = getString(com.zxkws.voicetimer.R.string.version_format, BuildConfig.VERSION_NAME)
         binding.micButton.setOnClickListener { ensureMicAndListen() }
         binding.cancelButton.setOnClickListener { TimerService.cancel(this) }
         requestNotifications()
@@ -89,7 +92,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onEvent(eventType: Int, params: Bundle?) {}
                 override fun onResults(results: Bundle?) {
                     val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                    binding.heardText.text = if (text.isBlank()) "没有识别到内容" else "听到：$text"
+                    binding.heardText.text = if (text.isBlank()) "没有识别到内容" else getString(com.zxkws.voicetimer.R.string.heard_format, text)
                     handleCommand(SemanticParser.parse(text))
                 }
             })
@@ -110,7 +113,7 @@ class MainActivity : AppCompatActivity() {
             }
             VoiceCommand.CancelTimer -> TimerService.cancel(this)
             VoiceCommand.RepeatTimer -> if (lastDuration > 0) TimerService.start(this, lastDuration) else binding.statusText.text = "还没有可重复的计时"
-            VoiceCommand.Unknown -> binding.statusText.text = "没理解，请说“计时10秒”"
+            VoiceCommand.Unknown -> binding.statusText.setText(com.zxkws.voicetimer.R.string.unknown_command)
         }
     }
 
@@ -124,7 +127,7 @@ class MainActivity : AppCompatActivity() {
     private fun checkUpdateNow() {
         lifecycleScope.launch {
             val info = withContext(Dispatchers.IO) { runCatching { UpdateManager.check() }.getOrNull() } ?: return@launch
-            binding.statusText.text = "发现新版本 ${info.versionName}，后台下载中"
+            binding.statusText.text = getString(com.zxkws.voicetimer.R.string.update_found_format, info.versionName)
             val apk = withContext(Dispatchers.IO) {
                 runCatching { UpdateManager.download(this@MainActivity, info) }.getOrNull()
             } ?: return@launch

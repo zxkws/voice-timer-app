@@ -4,9 +4,9 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
-import android.os.Build
 import android.os.CountDownTimer
 import android.os.IBinder
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.app.NotificationCompat
@@ -15,6 +15,7 @@ import com.zxkws.voicetimer.ui.MainActivity
 
 class TimerService : Service() {
     private var timer: CountDownTimer? = null
+    private val prefs by lazy { getSharedPreferences(PREFS_NAME, MODE_PRIVATE) }
 
     override fun onCreate() {
         super.onCreate()
@@ -23,30 +24,52 @@ class TimerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CANCEL) {
-            timer?.cancel()
-            stopSelf()
-            sendState(0, false)
+            cancelTimer()
             return START_NOT_STICKY
         }
-        val duration = intent?.getLongExtra(EXTRA_DURATION, 0L) ?: 0L
-        if (duration <= 0) return START_NOT_STICKY
+
+        val requestedDuration = intent?.getLongExtra(EXTRA_DURATION, 0L) ?: 0L
+        val duration = if (requestedDuration > 0) {
+            prefs.edit().putLong(KEY_END_ELAPSED, SystemClock.elapsedRealtime() + requestedDuration).apply()
+            requestedDuration
+        } else {
+            (prefs.getLong(KEY_END_ELAPSED, 0L) - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        }
+        if (duration <= 0) {
+            clearTimerState()
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         startForeground(NOTIFICATION_ID, notification(duration))
         timer?.cancel()
-        timer = object : CountDownTimer(duration, 250) {
+        timer = object : CountDownTimer(duration, 1_000) {
             override fun onTick(ms: Long) {
                 sendState(ms, true)
                 getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(ms))
             }
 
             override fun onFinish() {
+                clearTimerState()
                 sendState(0, false)
                 ring()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }.start()
-        return START_NOT_STICKY
+        return START_STICKY
+    }
+
+    private fun cancelTimer() {
+        timer?.cancel()
+        clearTimerState()
+        sendState(0, false)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun clearTimerState() {
+        prefs.edit().remove(KEY_END_ELAPSED).apply()
     }
 
     private fun notification(ms: Long): Notification {
@@ -65,8 +88,7 @@ class TimerService : Service() {
     private fun ring() {
         RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))?.play()
         val vibrator = getSystemService(Vibrator::class.java)
-        if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(350, VibrationEffect.DEFAULT_AMPLITUDE))
-        else @Suppress("DEPRECATION") vibrator.vibrate(350)
+        vibrator.vibrate(VibrationEffect.createOneShot(350, VibrationEffect.DEFAULT_AMPLITUDE))
         getSystemService(NotificationManager::class.java).notify(
             FINISH_NOTIFICATION_ID,
             NotificationCompat.Builder(this, CHANNEL_ID)
@@ -87,11 +109,9 @@ class TimerService : Service() {
     }
 
     private fun createChannel() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, getString(R.string.notification_channel_timer), NotificationManager.IMPORTANCE_LOW)
-            )
-        }
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, getString(R.string.notification_channel_timer), NotificationManager.IMPORTANCE_LOW)
+        )
     }
 
     private fun format(ms: Long): String {
@@ -110,6 +130,8 @@ class TimerService : Service() {
         private const val CHANNEL_ID = "timer"
         private const val NOTIFICATION_ID = 1001
         private const val FINISH_NOTIFICATION_ID = 1002
+        private const val PREFS_NAME = "timer_state"
+        private const val KEY_END_ELAPSED = "end_elapsed"
 
         fun start(context: Context, durationMs: Long) {
             context.startForegroundService(Intent(context, TimerService::class.java).putExtra(EXTRA_DURATION, durationMs))

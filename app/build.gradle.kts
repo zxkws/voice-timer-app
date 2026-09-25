@@ -34,7 +34,7 @@ android {
         release {
             isMinifyEnabled = false
             val hasReleaseKey = !System.getenv("VOICE_TIMER_KEYSTORE").isNullOrBlank()
-            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else null
         }
     }
 

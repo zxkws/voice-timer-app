@@ -19,9 +19,15 @@ object SemanticParser {
 
     private fun parseDuration(text: String): Long {
         var totalSeconds = 0.0
+        if (text.contains("一个半小时") || text.contains("1个半小时") || text.contains("1.5小时")) {
+            return 90 * 60 * 1000L
+        }
+        if (text.contains("半分钟") || text.contains("半分")) totalSeconds += 30
+        if (text.contains("半小时")) totalSeconds += 30 * 60
         Regex("([0-9]+(?:\\.[0-9]+)?)\\s*(?:小时|时)").find(text)?.groupValues?.get(1)?.toDoubleOrNull()?.let { totalSeconds += it * 3600 }
         Regex("([0-9]+(?:\\.[0-9]+)?)\\s*(?:分钟|分)").find(text)?.groupValues?.get(1)?.toDoubleOrNull()?.let { totalSeconds += it * 60 }
         Regex("([0-9]+(?:\\.[0-9]+)?)\\s*秒").find(text)?.groupValues?.get(1)?.toDoubleOrNull()?.let { totalSeconds += it }
+        if (Regex("[0-9]+(?:分钟|分)半").containsMatchIn(text)) totalSeconds += 30
         if (totalSeconds == 0.0) {
             Regex("(?:计时|倒计时|数)\\s*([0-9]+)").find(text)?.groupValues?.get(1)?.toDoubleOrNull()?.let { totalSeconds = it }
         }

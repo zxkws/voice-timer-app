@@ -16,6 +16,18 @@ class SemanticParserTest {
         assertEquals(VoiceCommand.StartTimer(30_000), SemanticParser.parse("计时三十秒"))
     }
 
+    @Test fun parsesHalfMinute() {
+        assertEquals(VoiceCommand.StartTimer(30_000), SemanticParser.parse("计时半分钟"))
+    }
+
+    @Test fun parsesMinuteAndHalf() {
+        assertEquals(VoiceCommand.StartTimer(90_000), SemanticParser.parse("计时一分半"))
+    }
+
+    @Test fun parsesHourAndHalf() {
+        assertEquals(VoiceCommand.StartTimer(5_400_000), SemanticParser.parse("计时一个半小时"))
+    }
+
     @Test fun parsesCancel() {
         assertEquals(VoiceCommand.CancelTimer, SemanticParser.parse("取消计时"))
     }
