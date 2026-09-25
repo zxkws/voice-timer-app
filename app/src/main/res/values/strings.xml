@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">语音计时</string>
+    <string name="notification_channel_timer">计时器</string>
+    <string name="notification_channel_update">应用更新</string>
+</resources>
