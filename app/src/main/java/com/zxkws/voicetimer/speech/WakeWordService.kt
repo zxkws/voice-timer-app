@@ -46,7 +46,7 @@ class WakeWordService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        startForeground(NOTIFICATION_ID, notification("等待唤醒词：计时助手"))
+        startForeground(NOTIFICATION_ID, notification("等待唤醒词：${WakeWordSpotter.WAKE_WORD}"))
         startCapture()
         return START_STICKY
     }
@@ -151,7 +151,7 @@ class WakeWordService : Service() {
         recognizer?.destroy()
         recognizer = null
         spotter?.reset()
-        updateNotification("$status · 等待：计时助手")
+        updateNotification("$status · 等待：${WakeWordSpotter.WAKE_WORD}")
         mainHandler.postDelayed({ startCapture() }, 500)
     }
 

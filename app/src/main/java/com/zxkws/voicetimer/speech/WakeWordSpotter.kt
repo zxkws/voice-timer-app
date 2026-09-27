@@ -38,7 +38,7 @@ class WakeWordSpotter(assets: AssetManager) : AutoCloseable {
             val keyword = spotter.getResult(stream).keyword
             if (!keyword.isNullOrBlank()) {
                 spotter.reset(stream)
-                return keyword == "计时助手"
+                return keyword == WAKE_WORD
             }
         }
         return false
@@ -50,5 +50,9 @@ class WakeWordSpotter(assets: AssetManager) : AutoCloseable {
     override fun close() {
         stream.release()
         spotter.release()
+    }
+
+    companion object {
+        const val WAKE_WORD = "维斯"
     }
 }

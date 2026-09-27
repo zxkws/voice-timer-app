@@ -12,6 +12,6 @@
     <string name="update_found_format">发现新版本 %1$s，后台下载中</string>
     <string name="wake_enable">开启后台唤醒</string>
     <string name="wake_disable">关闭后台唤醒</string>
-    <string name="wake_hint">唤醒词：“计时助手”</string>
+    <string name="wake_hint">唤醒词：“维斯”</string>
     <string name="notification_channel_wake">后台语音唤醒</string>
 </resources>
