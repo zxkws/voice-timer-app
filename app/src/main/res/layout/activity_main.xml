@@ -48,6 +48,21 @@
         android:layout_marginTop="12dp"
         android:text="@string/cancel_timer" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/wakeButton"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="12dp"
+        android:text="@string/wake_enable" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/wake_hint"
+        android:textSize="13sp" />
+
     <TextView
         android:id="@+id/versionText"
         android:layout_width="wrap_content"

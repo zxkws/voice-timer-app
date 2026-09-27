@@ -16,6 +16,7 @@ android {
         targetSdk = 35
         versionCode = ciVersionCode
         versionName = ciVersionName
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     signingConfigs {
@@ -48,6 +49,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    packaging {
+        jniLibs.excludes += setOf(
+            "**/libfastvoice_webrtc_aec3.so",
+            "**/libwebrtc-audio-processing-2.so",
+        )
+    }
+
     kotlinOptions { jvmTarget = "17" }
 }
 
@@ -58,5 +66,6 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.1")
     implementation("androidx.work:work-runtime-ktx:2.10.2")
+    implementation("io.github.zxkws:fastvoice-android-sdk:1.0.0")
     testImplementation("junit:junit:4.13.2")
 }

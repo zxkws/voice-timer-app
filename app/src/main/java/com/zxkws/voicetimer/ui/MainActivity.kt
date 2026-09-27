@@ -15,8 +15,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.work.*
 import com.zxkws.voicetimer.BuildConfig
 import com.zxkws.voicetimer.databinding.ActivityMainBinding
+import com.zxkws.voicetimer.speech.CommandExecutor
 import com.zxkws.voicetimer.speech.SemanticParser
 import com.zxkws.voicetimer.speech.VoiceCommand
+import com.zxkws.voicetimer.speech.WakeWordService
 import com.zxkws.voicetimer.timer.TimerService
 import com.zxkws.voicetimer.update.UpdateManager
 import com.zxkws.voicetimer.update.UpdateWorker
@@ -28,13 +30,19 @@ import java.util.concurrent.TimeUnit
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var recognizer: SpeechRecognizer? = null
-    private val prefs by lazy { getSharedPreferences("voice_timer", MODE_PRIVATE) }
-    private var lastDuration: Long
-        get() = prefs.getLong("last_duration", 0L)
-        set(value) { prefs.edit().putLong("last_duration", value).apply() }
+    private var pendingWakeStart = false
+    private var restartWakeAfterManual = false
 
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) listen() else binding.statusText.text = "需要麦克风权限"
+        if (!granted) {
+            pendingWakeStart = false
+            binding.statusText.text = "需要麦克风权限"
+        } else if (pendingWakeStart) {
+            pendingWakeStart = false
+            startWakeService()
+        } else {
+            listen()
+        }
     }
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
@@ -54,6 +62,14 @@ class MainActivity : AppCompatActivity() {
         binding.versionText.text = getString(com.zxkws.voicetimer.R.string.version_format, BuildConfig.VERSION_NAME)
         binding.micButton.setOnClickListener { ensureMicAndListen() }
         binding.cancelButton.setOnClickListener { TimerService.cancel(this) }
+        binding.wakeButton.setOnClickListener {
+            if (WakeWordService.isRunning) {
+                WakeWordService.stop(this)
+                binding.wakeButton.setText(com.zxkws.voicetimer.R.string.wake_enable)
+            } else {
+                ensureMicAndStartWake()
+            }
+        }
         requestNotifications()
         setupUpdateChecks()
         checkUpdateNow()
@@ -62,6 +78,10 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         ContextCompat.registerReceiver(this, timerReceiver, IntentFilter(TimerService.ACTION_STATE), ContextCompat.RECEIVER_NOT_EXPORTED)
+        binding.wakeButton.setText(
+            if (WakeWordService.isRunning) com.zxkws.voicetimer.R.string.wake_disable
+            else com.zxkws.voicetimer.R.string.wake_enable,
+        )
     }
 
     override fun onStop() {
@@ -70,8 +90,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun ensureMicAndListen() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) listen()
-        else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        pendingWakeStart = false
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        if (WakeWordService.isRunning) {
+            restartWakeAfterManual = true
+            WakeWordService.stop(this)
+            binding.root.postDelayed({ listen() }, 300)
+        } else {
+            listen()
+        }
+    }
+
+    private fun ensureMicAndStartWake() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            startWakeService()
+        } else {
+            pendingWakeStart = true
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun startWakeService() {
+        WakeWordService.start(this)
+        binding.wakeButton.setText(com.zxkws.voicetimer.R.string.wake_disable)
+        binding.statusText.text = "后台唤醒已开启"
     }
 
     private fun listen() {
@@ -87,13 +132,17 @@ class MainActivity : AppCompatActivity() {
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() { binding.statusText.text = "正在解析…" }
-                override fun onError(error: Int) { binding.statusText.text = "没听清，再试一次" }
+                override fun onError(error: Int) {
+                    binding.statusText.text = "没听清，再试一次"
+                    resumeWakeAfterManual()
+                }
                 override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
                 override fun onResults(results: Bundle?) {
                     val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                     binding.heardText.text = if (text.isBlank()) "没有识别到内容" else getString(com.zxkws.voicetimer.R.string.heard_format, text)
                     handleCommand(SemanticParser.parse(text))
+                    resumeWakeAfterManual()
                 }
             })
             sr.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -105,16 +154,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleCommand(command: VoiceCommand) {
-        when (command) {
-            is VoiceCommand.StartTimer -> {
-                lastDuration = command.durationMillis
-                TimerService.start(this, command.durationMillis)
-                binding.statusText.text = "开始计时"
-            }
-            VoiceCommand.CancelTimer -> TimerService.cancel(this)
-            VoiceCommand.RepeatTimer -> if (lastDuration > 0) TimerService.start(this, lastDuration) else binding.statusText.text = "还没有可重复的计时"
-            VoiceCommand.Unknown -> binding.statusText.setText(com.zxkws.voicetimer.R.string.unknown_command)
-        }
+        binding.statusText.text = CommandExecutor.execute(this, command)
+    }
+
+    private fun resumeWakeAfterManual() {
+        if (!restartWakeAfterManual) return
+        restartWakeAfterManual = false
+        binding.root.postDelayed({
+            if (!isFinishing && !isDestroyed) startWakeService()
+        }, 300)
     }
 
     private fun setupUpdateChecks() {
